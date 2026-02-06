@@ -7,7 +7,7 @@ import os
 
 # ========================= CONFIG =========================
 SUPABASE_DB_URL = "postgresql://postgres.pejsmevqeopxyvwddsdy:sakpal123412@aws-1-ap-south-1.pooler.supabase.com:6543/postgres"
-CSV_FILE_PATH = "/mnt/user-data/uploads/Indo-HateSpeech_NoNormal.csv"
+CSV_FILE_PATH = "Indo-HateSpeech_NoNormal (1).csv"
 
 Base = declarative_base()
 
