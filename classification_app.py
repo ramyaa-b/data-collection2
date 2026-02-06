@@ -11,7 +11,7 @@ SUPABASE_DB_URL = "postgresql://postgres.pejsmevqeopxyvwddsdy:sakpal123412@aws-1
 
 # IMPORTANT: Update this path to match your local file location
 # For local testing, use absolute path like: "C:/Users/YourName/Downloads/Indo-HateSpeech_NoNormal.csv"
-CSV_FILE_PATH = "Indo-HateSpeech_NoNormal (1).csv"  # Update this!
+CSV_FILE_PATH = "Indo-HateSpeech_NoNormal.csv"  # Update this!
 
 Base = declarative_base()
 
@@ -77,7 +77,7 @@ def load_csv():
         st.stop()
 
 def get_progress():
-    """Get current progress from database with proper error handling - NO CACHING"""
+    """Get current progress from database - NO CACHING"""
     session = get_session()
     try:
         progress = session.query(ClassificationProgress).first()
@@ -117,10 +117,7 @@ def update_progress(current_row, increment_processed=False, increment_skipped=Fa
             # Explicitly commit and refresh the transaction
             session.commit()
             session.refresh(progress)
-            session.flush()
             
-            # Debug logging
-            st.sidebar.info(f"✅ Progress updated: Row {current_row}")
             return True
         else:
             st.error("❌ No progress record found")
@@ -147,8 +144,6 @@ def save_classification(text, category):
         session.commit()
         session.refresh(submission)
        
-        # Debug logging
-        st.sidebar.success(f"✅ Saved to DB: ID {submission.id}")
         return True
        
     except SQLAlchemyError as e:
@@ -158,6 +153,22 @@ def save_classification(text, category):
         return False
     finally:
         session.close()
+
+def save_and_advance(text, category, current_row, is_skip=False):
+    """Combined function to save classification and update progress atomically"""
+    # First save the classification (unless it's a skip)
+    if not is_skip:
+        if not save_classification(text, category):
+            return False
+    
+    # Then update progress
+    success = update_progress(
+        current_row + 1, 
+        increment_processed=(not is_skip), 
+        increment_skipped=is_skip
+    )
+    
+    return success
 
 def get_statistics():
     """Get classification statistics with error handling"""
@@ -194,9 +205,9 @@ def main():
     st.title("🔍 Manual Text Classification Platform")
     st.markdown("---")
    
-    # Initialize session state for processing lock
-    if 'processing' not in st.session_state:
-        st.session_state.processing = False
+    # Initialize session state
+    if 'last_action' not in st.session_state:
+        st.session_state.last_action = None
    
     # Initialize tables
     with st.spinner("Initializing database..."):
@@ -218,7 +229,7 @@ def main():
         st.write(f"Total Rows: {total_rows}")
         st.write(f"CSV File: {CSV_FILE_PATH}")
         st.write(f"Database: Connected")
-        st.write(f"Processing Lock: {st.session_state.processing}")
+        st.write(f"Last Action: {st.session_state.last_action}")
    
     # Check if all rows are processed
     if current_row >= total_rows:
@@ -250,7 +261,6 @@ def main():
                     prog.last_updated = datetime.utcnow()
                     session.commit()
                     session.refresh(prog)
-                    session.flush()
                     st.success("✅ Progress reset!")
                     st.rerun()
             except Exception as e:
@@ -325,56 +335,58 @@ def main():
    
     # Classification buttons
     st.markdown("---")
+    
+    # Show success message if last action exists
+    if st.session_state.last_action:
+        st.success(f"✅ Previous entry saved as: {st.session_state.last_action}")
+        st.session_state.last_action = None
+    
     col1, col2, col3, col4, col5 = st.columns(5)
    
     with col1:
-        if st.button("🕌 Religion", use_container_width=True, type="primary", 
-                     key="btn_religion", disabled=st.session_state.processing):
-            st.session_state.processing = True
-            if save_classification(text, "religion"):
-                if update_progress(current_row + 1, increment_processed=True):
-                    st.session_state.processing = False
+        if st.button("🕌 Religion", use_container_width=True, type="primary", key="btn_religion"):
+            with st.spinner("Saving..."):
+                if save_and_advance(text, "religion", current_row):
+                    st.session_state.last_action = "Religion"
                     st.rerun()
-            st.session_state.processing = False
+                else:
+                    st.error("Failed to save")
    
     with col2:
-        if st.button("👤 Gender", use_container_width=True, type="primary", 
-                     key="btn_gender", disabled=st.session_state.processing):
-            st.session_state.processing = True
-            if save_classification(text, "gender"):
-                if update_progress(current_row + 1, increment_processed=True):
-                    st.session_state.processing = False
+        if st.button("👤 Gender", use_container_width=True, type="primary", key="btn_gender"):
+            with st.spinner("Saving..."):
+                if save_and_advance(text, "gender", current_row):
+                    st.session_state.last_action = "Gender"
                     st.rerun()
-            st.session_state.processing = False
+                else:
+                    st.error("Failed to save")
    
     with col3:
-        if st.button("🗣️ Language/Caste", use_container_width=True, type="primary", 
-                     key="btn_lang", disabled=st.session_state.processing):
-            st.session_state.processing = True
-            if save_classification(text, "language_caste"):
-                if update_progress(current_row + 1, increment_processed=True):
-                    st.session_state.processing = False
+        if st.button("🗣️ Language/Caste", use_container_width=True, type="primary", key="btn_lang"):
+            with st.spinner("Saving..."):
+                if save_and_advance(text, "language_caste", current_row):
+                    st.session_state.last_action = "Language/Caste"
                     st.rerun()
-            st.session_state.processing = False
+                else:
+                    st.error("Failed to save")
    
     with col4:
-        if st.button("✅ Normal", use_container_width=True, type="primary", 
-                     key="btn_normal", disabled=st.session_state.processing):
-            st.session_state.processing = True
-            if save_classification(text, "normal"):
-                if update_progress(current_row + 1, increment_processed=True):
-                    st.session_state.processing = False
+        if st.button("✅ Normal", use_container_width=True, type="primary", key="btn_normal"):
+            with st.spinner("Saving..."):
+                if save_and_advance(text, "normal", current_row):
+                    st.session_state.last_action = "Normal"
                     st.rerun()
-            st.session_state.processing = False
+                else:
+                    st.error("Failed to save")
    
     with col5:
-        if st.button("🗑️ Delete/Skip", use_container_width=True, type="secondary", 
-                     key="btn_skip", disabled=st.session_state.processing):
-            st.session_state.processing = True
-            if update_progress(current_row + 1, increment_skipped=True):
-                st.session_state.processing = False
-                st.rerun()
-            st.session_state.processing = False
+        if st.button("🗑️ Delete/Skip", use_container_width=True, type="secondary", key="btn_skip"):
+            with st.spinner("Skipping..."):
+                if save_and_advance(text, None, current_row, is_skip=True):
+                    st.session_state.last_action = "Skipped"
+                    st.rerun()
+                else:
+                    st.error("Failed to skip")
    
     # Keyboard shortcuts hint
     st.markdown("---")
