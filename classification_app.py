@@ -77,7 +77,7 @@ def load_csv():
         st.stop()
 
 def get_progress():
-    """Get current progress from database with proper error handling"""
+    """Get current progress from database with proper error handling - NO CACHING"""
     session = get_session()
     try:
         progress = session.query(ClassificationProgress).first()
@@ -114,9 +114,11 @@ def update_progress(current_row, increment_processed=False, increment_skipped=Fa
                 progress.total_skipped += 1
             progress.last_updated = datetime.utcnow()
            
-            # Explicitly commit the transaction
+            # Explicitly commit and refresh the transaction
             session.commit()
-           
+            session.refresh(progress)
+            session.flush()
+            
             # Debug logging
             st.sidebar.info(f"✅ Progress updated: Row {current_row}")
             return True
@@ -134,11 +136,6 @@ def save_classification(text, category):
     """Save classification to database with proper error handling"""
     session = get_session()
     try:
-        # Check if already exists (optional - remove if you want duplicates)
-        # existing = session.query(Submission).filter_by(text=text).first()
-        # if existing:
-        #     st.warning("⚠️ This text was already classified")
-       
         submission = Submission(
             text=text,
             category=category,
@@ -197,6 +194,10 @@ def main():
     st.title("🔍 Manual Text Classification Platform")
     st.markdown("---")
    
+    # Initialize session state for processing lock
+    if 'processing' not in st.session_state:
+        st.session_state.processing = False
+   
     # Initialize tables
     with st.spinner("Initializing database..."):
         init_tables()
@@ -207,7 +208,7 @@ def main():
    
     total_rows = len(df)
    
-    # Get current progress
+    # Get current progress (NOT CACHED)
     progress = get_progress()
     current_row = progress.current_row
    
@@ -217,6 +218,7 @@ def main():
         st.write(f"Total Rows: {total_rows}")
         st.write(f"CSV File: {CSV_FILE_PATH}")
         st.write(f"Database: Connected")
+        st.write(f"Processing Lock: {st.session_state.processing}")
    
     # Check if all rows are processed
     if current_row >= total_rows:
@@ -247,6 +249,8 @@ def main():
                     prog.total_skipped = 0
                     prog.last_updated = datetime.utcnow()
                     session.commit()
+                    session.refresh(prog)
+                    session.flush()
                     st.success("✅ Progress reset!")
                     st.rerun()
             except Exception as e:
@@ -304,7 +308,6 @@ def main():
         st.subheader(f"Row {current_row + 1} of {total_rows}")
        
         # Show original label as hint
-        label_color = "blue" if original_label != "N/A" else "red"
         st.info(f"**Original Label (from CSV)**: `{original_label}`")
        
         # Display text in a large text area
@@ -313,7 +316,7 @@ def main():
             value=text,
             height=250,
             disabled=True,
-            key=f"text_display_{current_row}"  # Unique key per row
+            key=f"text_display_{current_row}"
         )
    
     with col2:
@@ -325,60 +328,53 @@ def main():
     col1, col2, col3, col4, col5 = st.columns(5)
    
     with col1:
-        if st.button("🕌 Religion", use_container_width=True, type="primary", key="btn_religion"):
-            with st.spinner("Saving..."):
-                if save_classification(text, "religion"):
-                    if update_progress(current_row + 1, increment_processed=True):
-                        st.success("✅ Saved as Religion!")
-                        # Force cache clear
-                        st.cache_data.clear()
-                        # Small delay before rerun
-                        import time
-                        time.sleep(0.5)
-                        st.rerun()
+        if st.button("🕌 Religion", use_container_width=True, type="primary", 
+                     key="btn_religion", disabled=st.session_state.processing):
+            st.session_state.processing = True
+            if save_classification(text, "religion"):
+                if update_progress(current_row + 1, increment_processed=True):
+                    st.session_state.processing = False
+                    st.rerun()
+            st.session_state.processing = False
    
     with col2:
-        if st.button("👤 Gender", use_container_width=True, type="primary", key="btn_gender"):
-            with st.spinner("Saving..."):
-                if save_classification(text, "gender"):
-                    if update_progress(current_row + 1, increment_processed=True):
-                        st.success("✅ Saved as Gender!")
-                        st.cache_data.clear()
-                        import time
-                        time.sleep(0.5)
-                        st.rerun()
+        if st.button("👤 Gender", use_container_width=True, type="primary", 
+                     key="btn_gender", disabled=st.session_state.processing):
+            st.session_state.processing = True
+            if save_classification(text, "gender"):
+                if update_progress(current_row + 1, increment_processed=True):
+                    st.session_state.processing = False
+                    st.rerun()
+            st.session_state.processing = False
    
     with col3:
-        if st.button("🗣️ Language/Caste", use_container_width=True, type="primary", key="btn_lang"):
-            with st.spinner("Saving..."):
-                if save_classification(text, "language_caste"):
-                    if update_progress(current_row + 1, increment_processed=True):
-                        st.success("✅ Saved as Language/Caste!")
-                        st.cache_data.clear()
-                        import time
-                        time.sleep(0.5)
-                        st.rerun()
+        if st.button("🗣️ Language/Caste", use_container_width=True, type="primary", 
+                     key="btn_lang", disabled=st.session_state.processing):
+            st.session_state.processing = True
+            if save_classification(text, "language_caste"):
+                if update_progress(current_row + 1, increment_processed=True):
+                    st.session_state.processing = False
+                    st.rerun()
+            st.session_state.processing = False
    
     with col4:
-        if st.button("✅ Normal", use_container_width=True, type="primary", key="btn_normal"):
-            with st.spinner("Saving..."):
-                if save_classification(text, "normal"):
-                    if update_progress(current_row + 1, increment_processed=True):
-                        st.success("✅ Saved as Normal!")
-                        st.cache_data.clear()
-                        import time
-                        time.sleep(0.5)
-                        st.rerun()
+        if st.button("✅ Normal", use_container_width=True, type="primary", 
+                     key="btn_normal", disabled=st.session_state.processing):
+            st.session_state.processing = True
+            if save_classification(text, "normal"):
+                if update_progress(current_row + 1, increment_processed=True):
+                    st.session_state.processing = False
+                    st.rerun()
+            st.session_state.processing = False
    
     with col5:
-        if st.button("🗑️ Delete/Skip", use_container_width=True, type="secondary", key="btn_skip"):
-            with st.spinner("Skipping..."):
-                if update_progress(current_row + 1, increment_skipped=True):
-                    st.warning("⚠️ Row skipped!")
-                    st.cache_data.clear()
-                    import time
-                    time.sleep(0.5)
-                    st.rerun()
+        if st.button("🗑️ Delete/Skip", use_container_width=True, type="secondary", 
+                     key="btn_skip", disabled=st.session_state.processing):
+            st.session_state.processing = True
+            if update_progress(current_row + 1, increment_skipped=True):
+                st.session_state.processing = False
+                st.rerun()
+            st.session_state.processing = False
    
     # Keyboard shortcuts hint
     st.markdown("---")
