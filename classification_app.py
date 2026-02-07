@@ -11,7 +11,7 @@ SUPABASE_DB_URL = "postgresql://postgres.pejsmevqeopxyvwddsdy:sakpal123412@aws-1
 
 # IMPORTANT: Update this path to match your local file location
 # For local testing, use absolute path like: "C:/Users/YourName/Downloads/Indo-HateSpeech_NoNormal.csv"
-CSV_FILE_PATH = "Indo-HateSpeech_NoNormal.csv"  # Update this!
+CSV_FILE_PATH = "Indo-HateSpeech_NoNormal (1).csv"  # Update this!
 
 Base = declarative_base()
 
